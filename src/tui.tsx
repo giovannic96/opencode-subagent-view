@@ -20,7 +20,9 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
 
 const tui: TuiPlugin = async (api) => {
   api.slots.register({
-    order: 250,
+    // Built-in sidebar_content order: Context=100, MCP=200, LSP=300, Todo=400,
+    // Files=500. 350 places this section right after LSP, before Todo.
+    order: 350,
     slots: {
       sidebar_content(_ctx, props) {
         return <View api={api} session_id={props.session_id} />
