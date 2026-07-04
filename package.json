@@ -1,0 +1,40 @@
+{
+  "name": "opencode-subagent-view",
+  "version": "0.0.1",
+  "description": "Terminal UI plugin for OpenCode that adds a live \"Subagents\" panel to the session sidebar. Unofficial, not affiliated with the OpenCode team.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Giovanni Calà",
+  "homepage": "https://github.com/giovannic96/opencode-subagent-view#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/giovannic96/opencode-subagent-view.git"
+  },
+  "bugs": {
+    "url": "https://github.com/giovannic96/opencode-subagent-view/issues"
+  },
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "tui"
+  ],
+  "engines": {
+    "opencode": ">=1.17.0"
+  },
+  "exports": {
+    "./tui": "./src/tui.tsx"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "1.17.11",
+    "@opentui/core": "^0.4.3",
+    "@opentui/solid": "^0.4.3",
+    "solid-js": "1.9.12",
+    "typescript": "^6.0.3"
+  }
+}
