@@ -253,6 +253,12 @@ describe("updateChildSessionRecords", () => {
     expect(after.get("ses_a")).toEqual({ id: "ses_a", label: "[unknown] Cooking stuff", status: "error" })
   })
 
+  test("session.next.step.ended keeps a tracked child idle", () => {
+    const before = new Map([["ses_a", { id: "ses_a", label: "[unknown] Cooking stuff", status: "active" as const }]])
+    const after = updateChildSessionRecords(before, PARENT, stepEndedEvent("ses_a"))
+    expect(after.get("ses_a")).toEqual({ id: "ses_a", label: "[unknown] Cooking stuff", status: "idle" })
+  })
+
 })
 
 describe("trackChildSessions", () => {

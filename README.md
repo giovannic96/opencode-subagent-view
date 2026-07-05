@@ -57,8 +57,9 @@ Same caveat applies: put this in `tui.json`/`tui.jsonc`, not `opencode.json`.
 This is a plain TUI plugin, not a fork or patch of opencode itself. It hooks into the same `sidebar_content` slot that the built-in Context, LSP, MCP, and Todo sections use, so it renders as just another section in the existing sidebar rather than a separate window or overlay.
 
 > **Status**: being built incrementally, one small, tested, verified-in-a-real-session step at a time. Currently implemented and verified:
-> - A "Subagents (N)" section appears in the sidebar as soon as the current session has at least one direct child session (e.g. one spawned via the `task` tool), and disappears again once it has none. It updates live as subagents finish and go idle, no restart needed.
-> - The section now renders one row per tracked child, showing a colored status icon plus a label.
+> - A "Subagents (N active)" section appears only after the current session spawns its first direct child session (e.g. one spawned via the `task` tool).
+> - After that, it stays visible until the session is disposed, even if all tracked children go idle.
+> - The section renders one row per tracked child, showing a colored status icon plus a label.
 >
 > Not yet implemented: current activity and the auto-hide grace period after a subagent finishes. See the repo's commit history for what's landed so far.
 
@@ -83,7 +84,7 @@ An early version of the "Subagents (N)" line looked correct in isolated testing 
 
 The fix (see `getOrCreateChildSessionCount` in `src/tui.tsx`) caches state per session id for the plugin's lifetime instead of per render, so only the first call for a given session ever does real work; later calls just read the already-settled state, which can't restart the cycle. `tests/tui.test.ts` has a test that specifically pins this down, and the fix was also re-verified against the original real reproduction (a live `task`-tool delegation, not just a synthetic test) before being considered fixed.
 
-The current implementation keeps a record for each child session. Active children count toward the sidebar number, idle children stay visible for future UI work, and deleted children are removed entirely.
+The current implementation keeps a record for each child session. Active children count toward the sidebar number, idle children stay visible, and deleted children are removed entirely. The section itself stays visible once the first child has appeared, until the session is disposed.
 
 One subtle but important detail: the cache does **not** store the count itself. It stores the function returned by `getOrCreateChildSessionCount`, and that function closes over a Solid signal. The signal changes when `setChildIds(...)` runs, but the cached function stays the same, so every later call to `childSessionCount()` still reads the latest number. That is why caching the function is enough, even though the cache entry itself is only written once.
 
@@ -115,12 +116,12 @@ Suppose the current session is `A`.
 - Later, opencode creates a new session `B` with `parentID: "A"`.
 - A `session.created` event arrives.
 - `updateChildSessionMembership(...)` sees that `B` belongs to `A`, so it adds `B` to the set.
-- The count changes from `0` to `1`, and the sidebar shows `Subagents (1)`.
-- If `B` later becomes idle, the `session.idle` or `session.status` event keeps it in the record map but marks it `idle`.
-- If `B` finishes a step, the `session.next.step.ended` or `session.next.step.failed` event marks it `idle`.
+- The count changes from `0` to `1`, and the sidebar shows `Subagents (1 active)`.
+- If `B` later becomes idle, the `session.idle` or `session.status` event keeps it in the record map but marks it `idle`, and the section stays visible.
+- If `B` finishes a step, the `session.next.step.ended` or `session.next.step.failed` event marks it `idle`, and the section stays visible.
 - If OpenCode emits a later `session.updated` for `B`, the plugin keeps it idle instead of reactivating it.
 - If `B` is deleted, the `session.deleted` event removes it from the map.
-- The count goes back to `0`, and the sidebar hides again.
+- The count goes back to `0`, but the sidebar stays visible until the session itself is disposed.
 
 ### Why there's a patch for solid-js
 

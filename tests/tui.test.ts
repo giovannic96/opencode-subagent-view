@@ -137,6 +137,26 @@ describe("getOrCreateChildSessions", () => {
     dispose()
   })
 
+  test("the cached session state survives after all children go idle until disposal", async () => {
+    const sessionID = uniqueSessionID()
+    const { api, emit } = createMockApi()
+    const { onDispose, disposeAll } = createDisposeCollector()
+
+    const records = getOrCreateChildSessions(api, sessionID, onDispose)
+    await flush()
+
+    emit({ type: "session.created", properties: { sessionID: "ses_a", info: { id: "ses_a", parentID: sessionID } } })
+    await flush()
+    expect(countActiveChildSessions(records())).toBe(1)
+
+    emit({ type: "session.next.step.ended", properties: { sessionID: "ses_a" } })
+    await flush()
+    expect(countActiveChildSessions(records())).toBe(0)
+    expect(records().size).toBe(1)
+
+    disposeAll()
+  })
+
   test("disposing unsubscribes all event handlers (no leaks)", () => {
     const sessionID = uniqueSessionID()
     const { api, subscriberCount } = createMockApi()

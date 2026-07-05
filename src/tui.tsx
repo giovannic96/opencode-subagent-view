@@ -38,10 +38,10 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
   const childSessionRows = () => Array.from(childSessions().values()).sort((a, b) => a.id.localeCompare(b.id))
 
   return (
-    <Show when={childSessionCount() > 0}>
+    <Show when={childSessionRows().length > 0}>
       <box>
         <text fg={theme().text}>
-          <b>Subagents</b> ({childSessionCount()})
+          <b>Subagents</b> ({childSessionCount()} active)
         </text>
         <For each={childSessionRows()}>
           {(child) => {
