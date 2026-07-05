@@ -1,0 +1,157 @@
+import { createEffect, createRoot } from "solid-js"
+import { describe, expect, test } from "bun:test"
+import { getOrCreateChildSessionCount } from "../src/tui"
+import type { ChildSession, ChildSessionEvent, ChildSessionEventType } from "../src/session-children"
+import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
+
+let sessionCounter = 0
+/** A fresh id per test, since the cache under test is keyed by session id and lives at module scope. */
+function uniqueSessionID() {
+  sessionCounter += 1
+  return `ses_parent_${sessionCounter}`
+}
+
+/** A fake `api.client.session.children` + `api.event.on` good enough to drive the reactive wiring in isolation. */
+function createMockApi(initialChildren: readonly ChildSession[] = []) {
+  const handlers = new Map<ChildSessionEventType, Set<(event: ChildSessionEvent) => void>>()
+  let childrenCallCount = 0
+
+  const api = {
+    client: {
+      session: {
+        async children() {
+          childrenCallCount += 1
+          return { data: initialChildren }
+        },
+      },
+    },
+    event: {
+      on(type: ChildSessionEventType, handler: (event: ChildSessionEvent) => void) {
+        const set = handlers.get(type) ?? new Set()
+        set.add(handler)
+        handlers.set(type, set)
+        return () => {
+          handlers.get(type)?.delete(handler)
+        }
+      },
+    },
+  } as unknown as TuiPluginApi
+
+  return {
+    api,
+    emit(event: ChildSessionEvent) {
+      for (const handler of handlers.get(event.type) ?? []) handler(event)
+    },
+    subscriberCount() {
+      let total = 0
+      for (const set of handlers.values()) total += set.size
+      return total
+    },
+    getChildrenCallCount() {
+      return childrenCallCount
+    },
+  }
+}
+
+/** Stands in for `api.lifecycle.onDispose`: collects cleanup callbacks so a test can invoke them on demand. */
+function createDisposeCollector() {
+  const fns: Array<() => void> = []
+  return {
+    onDispose: (fn: () => void) => fns.push(fn),
+    disposeAll: () => {
+      for (const fn of fns) fn()
+    },
+  }
+}
+
+const flush = () => Promise.resolve().then(() => Promise.resolve())
+
+describe("getOrCreateChildSessionCount", () => {
+  test("starts at 0 before the initial fetch resolves", () => {
+    const sessionID = uniqueSessionID()
+    const { api } = createMockApi([{ id: "ses_child", parentID: sessionID }])
+    const count = getOrCreateChildSessionCount(api, sessionID, createDisposeCollector().onDispose)
+    expect(count()).toBe(0)
+  })
+
+  // Regression test for a real bug that hung a real opencode session; see
+  // README("A real bug this project hit") for the full story.
+  test("calling it twice for the same session reuses state and only fetches once", async () => {
+    const sessionID = uniqueSessionID()
+    const { api, getChildrenCallCount } = createMockApi([{ id: "ses_child", parentID: sessionID }])
+    const { onDispose } = createDisposeCollector()
+
+    const first = getOrCreateChildSessionCount(api, sessionID, onDispose)
+    const second = getOrCreateChildSessionCount(api, sessionID, onDispose)
+
+    expect(second).toBe(first)
+    await flush()
+    expect(getChildrenCallCount()).toBe(1)
+    expect(first()).toBe(1)
+  })
+
+  test("different sessions get independent state", async () => {
+    const sessionA = uniqueSessionID()
+    const sessionB = uniqueSessionID()
+    const { api: apiA } = createMockApi([{ id: "ses_child_a", parentID: sessionA }])
+    const { api: apiB } = createMockApi([])
+    const { onDispose } = createDisposeCollector()
+
+    const countA = getOrCreateChildSessionCount(apiA, sessionA, onDispose)
+    const countB = getOrCreateChildSessionCount(apiB, sessionB, onDispose)
+
+    await flush()
+    expect(countA()).toBe(1)
+    expect(countB()).toBe(0)
+  })
+
+  test("disposing unsubscribes all event handlers (no leaks)", () => {
+    const sessionID = uniqueSessionID()
+    const { api, subscriberCount } = createMockApi([])
+    const { onDispose, disposeAll } = createDisposeCollector()
+
+    getOrCreateChildSessionCount(api, sessionID, onDispose)
+    expect(subscriberCount()).toBeGreaterThan(0)
+
+    disposeAll()
+    expect(subscriberCount()).toBe(0)
+  })
+
+  // Guards against a regression in our own wiring (e.g. mutating the Set in
+  // place and returning the same reference by mistake, which would stop a
+  // reactive subscriber from rerunning). Not a test of the solid-js "node"
+  // export condition patch, bun test's own resolution isn't affected by
+  // that either way (verified separately).
+  test("a reactive subscriber (createEffect) actually reruns as the count changes", async () => {
+    const sessionID = uniqueSessionID()
+    const seen: number[] = []
+    const { api, emit } = createMockApi([])
+    const { onDispose } = createDisposeCollector()
+    let dispose!: () => void
+
+    createRoot((d) => {
+      dispose = d
+      const count = getOrCreateChildSessionCount(api, sessionID, onDispose)
+      createEffect(() => {
+        seen.push(count())
+      })
+    })
+
+    await flush()
+    expect(seen).toEqual([0])
+
+    emit({ type: "session.created", properties: { sessionID: "ses_a", info: { id: "ses_a", parentID: sessionID } } })
+    await flush()
+    expect(seen).toEqual([0, 1])
+
+    emit({ type: "session.created", properties: { sessionID: "ses_b", info: { id: "ses_b", parentID: sessionID } } })
+    await flush()
+    expect(seen).toEqual([0, 1, 2])
+
+    emit({ type: "session.deleted", properties: { sessionID: "ses_a", info: { id: "ses_a", parentID: sessionID } } })
+    await flush()
+    expect(seen).toEqual([0, 1, 2, 1])
+
+    dispose()
+  })
+})

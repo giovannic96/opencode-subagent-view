@@ -12,7 +12,7 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "noEmit": true,
-    "types": ["@opentui/core", "@opentui/solid"]
+    "types": ["@opentui/core", "@opentui/solid", "bun"]
   },
-  "include": ["src"]
+  "include": ["src", "tests"]
 }
