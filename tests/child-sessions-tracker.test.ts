@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { countActiveChildSessions, isChildOf, trackChildSessions, updateChildSessionRecords } from "../src/child-sessions-tracker"
-import { DEFAULT_CHILD_SESSION_LABEL_MAX_LENGTH, formatChildSessionLabel, getChildStatusMeta, truncateChildSessionLabel } from "../src/child-sessions-ui"
+import { DEFAULT_CHILD_SESSION_LABEL_MAX_LENGTH, formatChildSessionLabel, getChildSessionDisplayLabel, getChildStatusMeta, truncateChildSessionLabel } from "../src/labels-ui"
 import type { ChildSessionEvent } from "../src/child-sessions-types"
 import type { ChildSessionEventType, ChildSessionRecord, ChildSessionRecords } from "../src/child-sessions-types"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
@@ -150,6 +150,16 @@ describe("truncateChildSessionLabel", () => {
   })
 })
 
+describe("getChildSessionDisplayLabel", () => {
+  test("prefers activity over the original label", () => {
+    expect(getChildSessionDisplayLabel({ id: "ses_a", label: "[demo] original", status: "active", activity: "working" })).toBe("working")
+  })
+
+  test("falls back to the original label", () => {
+    expect(getChildSessionDisplayLabel({ id: "ses_a", label: "[demo] original", status: "active" })).toBe("[demo] original")
+  })
+})
+
 describe("updateChildSessionRecords", () => {
   test("session.created for a matching child adds it", () => {
     const before = new Map()
@@ -277,6 +287,148 @@ describe("updateChildSessionRecords", () => {
 
   test("session.next.step.ended keeps a tracked child idle", () => {
     const before = new Map([["ses_a", { id: "ses_a", label: "[unknown] Cooking stuff", status: "active" as const }]])
+    const after = updateChildSessionRecords(before, PARENT, stepEndedEvent("ses_a"))
+    expect(after.get("ses_a")).toEqual({ id: "ses_a", label: "[unknown] Cooking stuff", status: "idle" })
+  })
+
+  test("session.next.tool.called chooses a stable tool label", () => {
+    const before = new Map([["ses_a", { id: "ses_a", label: "[unknown] Cooking stuff", status: "active" as const }]])
+    const after = updateChildSessionRecords(before, PARENT, {
+      type: "session.next.tool.called",
+      properties: { sessionID: "ses_a", tool: "grep", input: { pattern: "src/**/*.ts" } },
+    })
+
+    expect(after.get("ses_a")).toEqual({
+      id: "ses_a",
+      label: "[unknown] Cooking stuff",
+      status: "active",
+      activity: "searching src/**/*.ts",
+    })
+  })
+
+  test("session.next.tool.called reports running shell for shell tools", () => {
+    const before = new Map([["ses_a", { id: "ses_a", label: "[unknown] Cooking stuff", status: "active" as const }]])
+    const after = updateChildSessionRecords(before, PARENT, {
+      type: "session.next.tool.called",
+      properties: { sessionID: "ses_a", tool: "shell", input: { command: "bun test" } },
+    })
+
+    expect(after.get("ses_a")).toEqual({
+      id: "ses_a",
+      label: "[unknown] Cooking stuff",
+      status: "active",
+      activity: "running shell: bun test",
+    })
+  })
+
+  test("message.part.updated prefers a finalized subtask description", () => {
+    const before = new Map([["ses_a", { id: "ses_a", label: "[unknown] Cooking stuff", status: "active" as const }]])
+    const after = updateChildSessionRecords(before, PARENT, {
+      type: "message.part.updated",
+      properties: {
+        sessionID: "ses_a",
+        time: 1,
+        part: {
+          id: "part_a",
+          sessionID: "ses_a",
+          messageID: "msg_a",
+          type: "subtask",
+          prompt: "Inspect tests",
+          description: "Review the tracker tests",
+          agent: "task",
+        },
+      },
+    })
+
+    expect(after.get("ses_a")).toEqual({
+      id: "ses_a",
+      label: "[unknown] Cooking stuff",
+      status: "active",
+      activity: "subtask: Review the tracker tests",
+    })
+  })
+
+  test("message.part.updated prefers concrete tool titles when available", () => {
+    const before = new Map([["ses_a", { id: "ses_a", label: "[unknown] Cooking stuff", status: "active" as const }]])
+    const after = updateChildSessionRecords(before, PARENT, {
+      type: "message.part.updated",
+      properties: {
+        sessionID: "ses_a",
+        time: 1,
+        part: {
+          id: "part_a",
+          sessionID: "ses_a",
+          messageID: "msg_a",
+          type: "tool",
+          callID: "call_a",
+          tool: "glob",
+          state: { status: "completed", input: {}, output: "", title: "src/**/*.ts", metadata: {}, time: { start: 1, end: 2 } },
+        },
+      },
+    })
+
+    expect(after.get("ses_a")).toEqual({
+      id: "ses_a",
+      label: "[unknown] Cooking stuff",
+      status: "active",
+      activity: "glob: src/**/*.ts",
+    })
+  })
+
+  test("message.part.updated prefers concrete reasoning text when available", () => {
+    const before = new Map([["ses_a", { id: "ses_a", label: "[unknown] Cooking stuff", status: "active" as const }]])
+    const after = updateChildSessionRecords(before, PARENT, {
+      type: "message.part.updated",
+      properties: {
+        sessionID: "ses_a",
+        time: 1,
+        part: {
+          id: "part_a",
+          sessionID: "ses_a",
+          messageID: "msg_a",
+          type: "reasoning",
+          text: "checking whether the tracker already has this child",
+          time: { start: 1 },
+        },
+      },
+    })
+
+    expect(after.get("ses_a")).toEqual({
+      id: "ses_a",
+      label: "[unknown] Cooking stuff",
+      status: "active",
+      activity: "reasoning: checking whether the tracker already has this child",
+    })
+  })
+
+  test("message.part.updated uses text directly", () => {
+    const before = new Map([["ses_a", { id: "ses_a", label: "[unknown] Cooking stuff", status: "active" as const }]])
+    const after = updateChildSessionRecords(before, PARENT, {
+      type: "message.part.updated",
+      properties: {
+        sessionID: "ses_a",
+        time: 1,
+        part: {
+          id: "part_a",
+          sessionID: "ses_a",
+          messageID: "msg_a",
+          type: "text",
+          text: "drafting the summary for the next step",
+          time: { start: 1 },
+        },
+      },
+    })
+
+    expect(after.get("ses_a")).toEqual({
+      id: "ses_a",
+      label: "[unknown] Cooking stuff",
+      status: "active",
+      activity: "drafting the summary for the next step",
+    })
+  })
+
+  test("session.next.step.ended clears the live activity label", () => {
+    const before = new Map([["ses_a", { id: "ses_a", label: "[unknown] Cooking stuff", status: "active" as const, activity: "writing a summary" }]])
     const after = updateChildSessionRecords(before, PARENT, stepEndedEvent("ses_a"))
     expect(after.get("ses_a")).toEqual({ id: "ses_a", label: "[unknown] Cooking stuff", status: "idle" })
   })

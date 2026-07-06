@@ -1,7 +1,12 @@
 import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui"
 import { For, createSignal, Show } from "solid-js"
 import { countActiveChildSessions, trackChildSessions } from "./child-sessions-tracker"
-import { DEFAULT_CHILD_SESSION_LABEL_MAX_LENGTH, getChildStatusMeta, truncateChildSessionLabel } from "./child-sessions-ui"
+import {
+  DEFAULT_CHILD_SESSION_ACTIVITY_MAX_LENGTH,
+  DEFAULT_CHILD_SESSION_LABEL_MAX_LENGTH,
+  getChildStatusMeta,
+  truncateChildSessionLabel,
+} from "./labels-ui"
 import type { ChildSessionRecords } from "./child-sessions-types"
 
 const id = "subagent-view"
@@ -80,12 +85,20 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
                   ? currentTheme.success
                   : statusMeta.tone === "warning"
                     ? currentTheme.warning
-                  : statusMeta.tone === "error"
-                    ? currentTheme.error
-                    : currentTheme.textMuted
-              const label = truncateChildSessionLabel(child.label, DEFAULT_CHILD_SESSION_LABEL_MAX_LENGTH)
+                    : statusMeta.tone === "error"
+                      ? currentTheme.error
+                      : currentTheme.textMuted
+              const title = truncateChildSessionLabel(child.label, DEFAULT_CHILD_SESSION_LABEL_MAX_LENGTH)
+              const activity = child.activity ? truncateChildSessionLabel(child.activity, DEFAULT_CHILD_SESSION_ACTIVITY_MAX_LENGTH) : undefined
 
-              return <text fg={fg}>{statusMeta.icon} {label}</text>
+              return (
+                <box>
+                  <text fg={fg}>{statusMeta.icon} {title}</text>
+                  <Show when={activity}>
+                    <text fg={currentTheme.textMuted}>  ↳ {activity}</text>
+                  </Show>
+                </box>
+              )
             }}
           </For>
         </Show>

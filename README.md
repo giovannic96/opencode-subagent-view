@@ -91,17 +91,23 @@ The full flow is:
 1. `View(...)` renders for a specific `session_id`.
 2. `getOrCreateChildSessionCount(...)` checks whether that session already has a cached getter.
 3. On the first render for that session, it creates a Solid signal with an empty `Set` of child ids.
-4. `trackChildSessions(...)` subscribes to live `session.created`, `session.updated`, `session.status`, `session.idle`, `session.deleted`, `session.next.step.ended`, and `session.next.step.failed` events.
+4. `trackChildSessions(...)` subscribes to live `session.created`, `session.updated`, `session.status`, `session.idle`, `session.deleted`, `session.next.step.ended`, `session.next.step.failed`, `session.next.tool.input.started`, `session.next.tool.called`, `session.next.retried`, and `message.part.updated` events.
 5. The live events are handled a little differently:
-   - `session.created`: if the new session belongs to the current parent, it is added as `active`.
-   - `session.updated`: if the session still belongs to the current parent and is already tracked, it stays in whatever state it already had; if it no longer belongs, it is removed.
-   - `session.status` and `session.idle`: when a tracked child becomes idle, it stays in the map but is marked `idle`.
-   - `session.next.step.ended` and `session.next.step.failed`: when a tracked child finishes a step, it is marked `idle`.
-   - `session.deleted`: if the deleted session id was in the map, it is removed.
-   - Those event names are defined once in `src/child-sessions-types.ts` and the type is derived from that list, so the code does not repeat the union in multiple places.
+   - `session.created`: a new direct child session was created. If it belongs to the current parent, it is added as `active` and gets the base label like `[agent] title`.
+   - `session.updated`: an existing session changed. If it still belongs to the current parent and is already tracked, it stays in whatever state it already had; if it no longer belongs, it is removed.
+   - `session.status`: the session reported a status change. `busy` keeps the child active, `idle` marks it idle, and `retry` marks it retry.
+   - `session.idle`: the session explicitly went idle. The child stays in the map but becomes `idle`.
+    - `session.next.step.ended`: the child finished its current step. The row stays visible, but the status becomes `idle`.
+    - `session.next.step.failed`: the child failed its current step. The row stays visible, but the status becomes `error`.
+    - `session.next.tool.input.started`: the child started preparing a tool call. The row only changes if the tool input already contains a target we can show.
+    - `session.next.tool.called`: the tool was called. The row activity becomes a concrete summary like `searching src/**/*.ts`, `editing README.md`, or `running shell: bun test` when the input provides a target. If OpenCode does not give us a target, the existing activity stays in place.
+    - `session.next.retried`: the session retried. The row activity becomes `retrying N`.
+    - `message.part.updated`: a finalized part arrived or changed. The row activity is derived from the part type, for example `reasoning: ...` for reasoning text, a raw text snippet for `text`, `glob: src/**/*.ts` for completed tool output, or `subtask: ...` for delegated work.
+    - `session.deleted`: the child session was deleted. If its id is tracked, it is removed from the map.
+    - Those event names are defined once in `src/child-sessions-types.ts` and the type is derived from that list, so the code does not repeat the union in multiple places.
 6. Whenever one of those cases changes the set, `setChildIds(...)` replaces the signal with a new set.
 7. Solid notices that `childIds()` changed, so `childSessionCount()` is re-evaluated.
-8. The sidebar now shows the updated `Subagents (N)` value.
+8. The sidebar now shows the updated `Subagents (N active)` value, plus a per-row status icon, the original `[agent] title`, and a second indented line for the current activity when available.
 9. If the same session is rendered again, the cached getter is reused instead of creating a new signal or a new listener.
 10. When the plugin/view is being shut down, for example when you quit opencode, close the terminal, or disable/reload the plugin, the `onDispose(...)` callback runs. It calls `unsubscribe()` so the live event listeners stop and the cached entry for that session is removed.
 11. That cleanup matters because otherwise the plugin would keep listening to old session events even after the view is gone.
@@ -116,7 +122,10 @@ Suppose the current session is `A`.
 - `updateChildSessionMembership(...)` sees that `B` belongs to `A`, so it adds `B` to the set.
 - The count changes from `0` to `1`, and the sidebar shows `Subagents (1 active)`.
 - If `B` later becomes idle, the `session.idle` or `session.status` event keeps it in the record map but marks it `idle`, and the section stays visible.
-- If `B` finishes a step, the `session.next.step.ended` or `session.next.step.failed` event marks it `idle`, and the section stays visible.
+- If `B` starts reasoning or text, the second line stays as-is unless OpenCode later gives concrete text to show.
+- If `B` calls a tool, the second line shows a concrete summary like `searching src/**/*.ts` or `running shell: bun test` when the tool input has a target, and it stays unchanged when the tool has no target or fails.
+- If `B` emits a finalized part, `message.part.updated` refreshes the second line with that concrete summary only when there is real text to show.
+- If `B` finishes a step, the `session.next.step.ended` or `session.next.step.failed` event marks it `idle` or `error`, and the section stays visible.
 - If OpenCode emits a later `session.updated` for `B`, the plugin keeps it idle instead of reactivating it.
 - If `B` is deleted, the `session.deleted` event removes it from the map.
 - The count goes back to `0`, but the sidebar stays visible until the session itself is disposed.

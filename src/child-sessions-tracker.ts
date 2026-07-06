@@ -8,7 +8,7 @@ import type {
 } from "./child-sessions-types"
 import { CHILD_SESSION_EVENT_TYPES } from "./child-sessions-types"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
-import { formatChildSessionLabel } from "./child-sessions-ui"
+import { formatChildSessionLabel, getEventActivity } from "./labels-ui"
 
 export function isChildOf(session: ChildSession, parentSessionID: string): boolean {
   return session.parentID === parentSessionID
@@ -29,6 +29,20 @@ function addOrIgnoreChild(
 
   const next = new Map(records)
   next.set(session.id, { id: session.id, label: formatChildSessionLabel(session), status: "active" })
+  return next
+}
+
+function updateChildActivityLabel(records: ChildSessionRecords, sessionID: string, activity?: string): ChildSessionRecords {
+  const record = records.get(sessionID)
+  if (!record || record.status !== "active") return records
+
+  if (!activity?.trim()) return records
+
+  const nextActivity = activity.trim()
+  if (record.activity === nextActivity) return records
+
+  const next = new Map(records)
+  next.set(sessionID, { ...record, activity: nextActivity })
   return next
 }
 
@@ -80,12 +94,36 @@ export function updateChildSessionRecords(
     case "session.idle":
     case "session.status": {
       const nextStatus = event.type === "session.idle" ? "idle" : toRecordStatus(event.properties.status.type)
-      return setChildStatus(records, event.properties.sessionID, nextStatus)
+      const next = setChildStatus(records, event.properties.sessionID, nextStatus)
+      if (next === records) return records
+
+      const record = next.get(event.properties.sessionID)
+      if (!record) return next
+
+      const updated = new Map(next)
+      updated.set(event.properties.sessionID, { ...record, activity: undefined })
+      return updated
     }
 
     case "session.next.step.ended":
     case "session.next.step.failed": {
-      return setChildStatus(records, event.properties.sessionID, event.type === "session.next.step.failed" ? "error" : "idle")
+      const next = setChildStatus(records, event.properties.sessionID, event.type === "session.next.step.failed" ? "error" : "idle")
+      if (next === records) return records
+
+      const record = next.get(event.properties.sessionID)
+      if (!record) return next
+
+      const updated = new Map(next)
+      updated.set(event.properties.sessionID, { ...record, activity: undefined })
+      return updated
+    }
+
+    case "session.next.tool.input.started":
+    case "session.next.tool.called":
+    case "session.next.retried":
+    case "message.part.updated": {
+      const eventActivity = getEventActivity(event)
+      return eventActivity ? updateChildActivityLabel(records, event.properties.sessionID, eventActivity) : records
     }
 
     case "session.created":
@@ -93,6 +131,9 @@ export function updateChildSessionRecords(
       const { info } = event.properties
       return isChildOf(info, parentSessionID) ? addOrIgnoreChild(records, parentSessionID, info) : removeChild(records, info.id)
     }
+
+    default:
+      return records
   }
 }
 
@@ -124,6 +165,7 @@ export function trackChildSessions(
   applyUpdate: (reducer: (current: ChildSessionRecords) => ChildSessionRecords) => void,
 ): () => void {
   const handleChildSessionEvent = applyChildSessionEvent(parentSessionID, applyUpdate)
+
   const unsubscribeAll = CHILD_SESSION_EVENT_TYPES.map((type: ChildSessionEventType) => api.event.on(type, handleChildSessionEvent))
 
   return () => {

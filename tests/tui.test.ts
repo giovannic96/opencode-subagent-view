@@ -14,7 +14,7 @@ function uniqueSessionID() {
 
 /** A fake `api.event.on` good enough to drive the reactive wiring in isolation. */
 function createMockApi() {
-  const handlers = new Map<ChildSessionEventType, Set<(event: ChildSessionEvent) => void>>()
+  const handlers = new Map<ChildSessionEventType | "session.next.text.delta", Set<(event: ChildSessionEvent) => void>>()
 
   const api = {
     event: {
