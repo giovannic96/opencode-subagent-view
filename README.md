@@ -59,7 +59,7 @@ This is a plain TUI plugin, not a fork or patch of opencode itself. It hooks int
 > **Status**: being built incrementally, one small, tested, verified-in-a-real-session step at a time. Currently implemented and verified:
 > - A "Subagents (N active)" section appears only after the current session spawns its first direct child session (e.g. one spawned via the `task` tool).
 > - After that, it stays visible until the session is disposed, even if all tracked children go idle.
-> - The section renders one row per tracked child, showing a colored status icon plus a label.
+> - The section renders one row per tracked child, showing a colored status icon plus a label that truncates to fit the sidebar.
 >
 > Not yet implemented: current activity and the auto-hide grace period after a subagent finishes. See the repo's commit history for what's landed so far.
 

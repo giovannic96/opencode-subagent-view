@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { countActiveChildSessions, isChildOf, trackChildSessions, updateChildSessionRecords } from "../src/child-sessions-tracker"
-import { formatChildSessionLabel, getChildStatusMeta } from "../src/child-sessions-ui"
+import { DEFAULT_CHILD_SESSION_LABEL_MAX_LENGTH, formatChildSessionLabel, getChildStatusMeta, truncateChildSessionLabel } from "../src/child-sessions-ui"
 import type { ChildSessionEvent } from "../src/child-sessions-types"
 import type { ChildSessionEventType, ChildSessionRecord, ChildSessionRecords } from "../src/child-sessions-types"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
@@ -125,6 +125,28 @@ describe("formatChildSessionLabel", () => {
 
   test("strips the trailing subagent marker from the title", () => {
     expect(formatChildSessionLabel({ id: "ses_a", agent: "explore", title: "Inspect tests (@explore subagent)" })).toBe("[explore] Inspect tests")
+  })
+})
+
+describe("truncateChildSessionLabel", () => {
+  test("keeps short labels intact", () => {
+    expect(truncateChildSessionLabel("[demo] short", DEFAULT_CHILD_SESSION_LABEL_MAX_LENGTH)).toBe("[demo] short")
+  })
+
+  test("adds an ellipsis when the label is too long", () => {
+    expect(truncateChildSessionLabel("[demo] a very long child session label that needs trimming", 20)).toBe("[demo] a very long …")
+  })
+
+  test("falls back sanely for tiny widths", () => {
+    expect(truncateChildSessionLabel("[demo] tiny", 1)).toBe("[")
+  })
+
+  test("does not truncate typical longer labels at the default estimate", () => {
+    expect(truncateChildSessionLabel("[demo] inspect src, explain the tracker and summarize the UI", DEFAULT_CHILD_SESSION_LABEL_MAX_LENGTH)).toBe("[demo] inspect src, explain the tracker and summarize the UI")
+  })
+
+  test("uses the shared default estimate", () => {
+    expect(DEFAULT_CHILD_SESSION_LABEL_MAX_LENGTH).toBe(72)
   })
 })
 

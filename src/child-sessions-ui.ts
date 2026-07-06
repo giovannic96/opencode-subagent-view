@@ -8,10 +8,18 @@ export type ChildSessionStatusMeta = {
   tone: ChildSessionStatusTone
 }
 
+export const DEFAULT_CHILD_SESSION_LABEL_MAX_LENGTH = 72
+
 export function formatChildSessionLabel(session: ChildSession): string {
   const agent = session.agent ?? "unknown"
   const title = (session.title ?? "Cooking stuff").replace(/\s*\(@[^)]* subagent\)$/u, "")
   return `[${agent}] ${title}`
+}
+
+export function truncateChildSessionLabel(label: string, maxLength = DEFAULT_CHILD_SESSION_LABEL_MAX_LENGTH): string {
+  if (label.length <= maxLength) return label
+  if (maxLength <= 1) return label.slice(0, maxLength)
+  return `${label.slice(0, maxLength - 1)}…`
 }
 
 export function getChildStatusMeta(status: ChildSessionRecordStatus): ChildSessionStatusMeta {
