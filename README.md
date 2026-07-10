@@ -59,15 +59,18 @@ This is a plain TUI plugin, not a fork or patch of opencode itself. It hooks int
 > **Status**: being built incrementally, one small, tested, verified-in-a-real-session step at a time. Currently implemented and verified:
 > - A "Subagents (N active)" section appears only after the current session spawns its first direct child session (e.g. one spawned via the `task` tool).
 > - After that, it stays visible until the session is disposed, even if all tracked children go idle.
-> - The section renders one row per tracked child, showing a colored status icon plus a label that truncates to fit the sidebar.
+> - The section renders one row per tracked child, showing a colored status icon, a label that truncates to fit the sidebar, and a second indented line with the current live activity when available.
+> - The section header can be collapsed and expanded with a mouse click.
+> - When a new run starts (a fresh child session appears after the section had only idle children), the old idle rows are cleared so the section shows only the new run.
 >
-> Not yet implemented: current activity and the auto-hide grace period after a subagent finishes. See the repo's commit history for what's landed so far.
+> See the repo's commit history for what's landed so far.
 
 ### Code layout
 
 - `src/child-sessions-tracker.ts`: session membership logic plus the live session subscription. Plain data in, data out.
-- `src/child-sessions-types.ts`: shared child-session and event types.
-- `src/tui.tsx`: the only file that touches solid-js (`createSignal`) and JSX, kept as thin as possible on purpose (see "Why all the solid-js code lives in one file" below). Registers the section at `order: 350` in the shared `sidebar_content` slot (built-ins: Context=100, MCP=200, LSP=300, Todo=400, Files=500), placing it right after LSP, before Todo.
+- `src/child-sessions-types.ts`: shared child-session and event types. `CHILD_SESSION_EVENT_TYPES` is defined once here and the event type union is derived from it, so the rest of the code never repeats it.
+- `src/labels-ui.ts`: all label and activity formatting helpers (`formatChildSessionLabel`, `getChildSessionDisplayLabel`, `truncateChildSessionLabel`, `getChildStatusMeta`, and the tool/activity label builders). Plain data in, data out, no solid-js.
+- `src/tui.tsx`: the only file that touches solid-js (`createSignal`) and JSX, kept as thin as possible on purpose (see "Why all the solid-js code lives in one file" below). Registers the section at `order: 350` in the shared `sidebar_content` slot (built-ins: Context=100, MCP=200, LSP=300, Todo=400, Files=500), placing it right after LSP, before Todo. Also owns the collapse/expand signal for the section header.
 
 ### Why all the solid-js code lives in one file
 
@@ -141,3 +144,7 @@ That's the right choice for a typical Node.js backend, but wrong here: this plug
 The symptom, if this isn't patched, is subtle and confusing: `createSignal`, `createEffect`, and `createMemo` all still exist and don't throw, but nothing created with them ever updates after the initial render, because the resolved `solid-js` build's `createEffect` is a literal no-op and its signals don't notify subscribers.
 
 `patches/solid-js+1.9.12.patch` removes that `"node"` condition from `solid-js`'s own `package.json`, applied automatically on install by [`patch-package`](https://github.com/ds300/patch-package) (a standard, widely-used tool for exactly this situation, patching a third-party dependency without forking it). The patch is a plain, five-line diff, reviewable in the file itself. `patch-package` fails the install loudly if a future `solid-js` upgrade makes the patch no longer apply cleanly, rather than silently doing nothing.
+
+## License
+
+MIT, see [LICENSE](./LICENSE).
