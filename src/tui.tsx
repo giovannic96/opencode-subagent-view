@@ -1,9 +1,7 @@
 // This is the package's real "./tui" entrypoint. It intentionally does not
 // statically import solid-js or @opentui/solid itself (see below), and
 // contains no plugin logic of its own. The actual implementation lives in
-// src/plugin.tsx, and is dynamically imported here from its prebuilt
-// dist/plugin.js (see "npm run build" and README, "Why this plugin
-// prebuilds its own JSX").
+// src/plugin.tsx.
 //
 // Why this file exists: solid-js publishes a conditional `exports` map with
 // a "node" condition that points at its non-reactive SSR build. Bun matches
@@ -66,13 +64,7 @@ function patchSolidJsExports(): void {
 
 patchSolidJsExports()
 
-// Typed against the authored source file (for tsc), loaded at runtime from
-// its prebuilt output instead (see "npm run build" above). The build output
-// has no declaration file of its own, since it's a gitignored build
-// artifact, hence the suppression on the import itself.
-type PluginModule = typeof import("./plugin")
-// @ts-expect-error -- dist/plugin.js is a build artifact with no .d.ts; see PluginModule above
-const impl = (await import("../dist/plugin.js")) as PluginModule
+const impl = await import("./plugin")
 
 export const getOrCreateChildSessions = impl.getOrCreateChildSessions
 export const getOrCreateChildSessionsCollapsed = impl.getOrCreateChildSessionsCollapsed

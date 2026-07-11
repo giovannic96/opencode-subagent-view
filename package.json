@@ -1,6 +1,6 @@
 {
   "name": "opencode-subagents-view",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Terminal UI plugin for OpenCode that adds a live \"Subagents\" panel to the session sidebar. Unofficial, not affiliated with the OpenCode team.",
   "type": "module",
   "license": "MIT",
@@ -25,14 +25,11 @@
     "./tui": "./src/tui.tsx"
   },
   "files": [
-    "src",
-    "dist"
+    "src"
   ],
   "scripts": {
     "test": "bun test --conditions=browser",
-    "typecheck": "tsc --noEmit",
-    "build": "bun build src/plugin.tsx --no-bundle --outfile dist/plugin.js --format=esm && bun build src/child-sessions-tracker.ts --no-bundle --outfile dist/child-sessions-tracker.js --format=esm && bun build src/labels-ui.ts --no-bundle --outfile dist/labels-ui.js --format=esm && bun build src/child-sessions-types.ts --no-bundle --outfile dist/child-sessions-types.js --format=esm",
-    "prepare": "bun run build"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@opentui/solid": "^0.4.3",
