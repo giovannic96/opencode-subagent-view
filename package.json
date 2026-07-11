@@ -26,16 +26,15 @@
   },
   "files": [
     "src",
-    "patches"
+    "scripts"
   ],
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "postinstall": "patch-package"
+    "postinstall": "node scripts/fix-solid-js-exports.mjs"
   },
   "dependencies": {
     "@opentui/solid": "^0.4.3",
-    "patch-package": "^8.0.1",
     "solid-js": "1.9.12"
   },
   "devDependencies": {
