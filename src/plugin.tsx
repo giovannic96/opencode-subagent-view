@@ -94,10 +94,24 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
               const activity = child.activity ? truncateChildSessionLabel(child.activity, DEFAULT_CHILD_SESSION_ACTIVITY_MAX_LENGTH) : undefined
 
               return (
-                <box>
-                  <text fg={fg}>{statusMeta.icon} {title}</text>
+                <box flexDirection="column">
+                  <box flexDirection="row">
+                    <box width={2}>
+                      <text fg={fg}>{statusMeta.icon} </text>
+                    </box>
+                    <box flexGrow={1}>
+                      <text fg={fg} wrapMode="word">{title}</text>
+                    </box>
+                  </box>
                   <Show when={activity}>
-                    <text fg={currentTheme.textMuted}>  ↳ {activity}</text>
+                    <box flexDirection="row" paddingLeft={2}>
+                      <box width={2}>
+                        <text fg={currentTheme.textMuted}>↳ </text>
+                      </box>
+                      <box flexGrow={1}>
+                        <text fg={currentTheme.textMuted} wrapMode="word">{activity}</text>
+                      </box>
+                    </box>
                   </Show>
                 </box>
               )
